@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B1220"><link rel="manifest" href="manifest.json">
+<title>NetKu Billing</title>
+<style>
+:root{--bg:#0B1220;--card:#131C2E;--line:#243049;--tx:#F1F5F9;--mu:#94A3B8;--ac:#2DD4BF;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 Inter,system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+#app{max-width:480px;margin:0 auto;min-height:100vh;padding:calc(env(safe-area-inset-top) + 20px) 16px 110px}
+h1{font-size:22px;margin:0}h2{font-size:14px;margin:0 0 4px}.mu{color:var(--mu);font-size:12px}
+.card{background:var(--card);border-radius:20px;padding:16px;margin-top:12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}.g{display:flex;gap:12px}.g>*{flex:1}
+.big{font-size:26px;font-weight:700}.b{font-weight:600}
+.btn{min-height:44px;border-radius:14px;border:1px solid var(--ac);background:none;color:var(--ac);font-weight:700;padding:0 14px;width:100%}
+.btn.p{background:var(--ac);color:#0B1220}.btn.d{border-color:#F87171;color:#FCA5A5}
+.chip{min-height:44px;padding:0 16px;border-radius:22px;border:1px solid #334155;background:var(--card);white-space:nowrap}
+.chip.on{background:var(--ac);color:#0B1220;border-color:var(--ac);font-weight:700}
+.pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.lunas{background:#134E4A;color:#5EEAD4}.belum{background:#78350F;color:#FDE68A}.telat{background:#7F1D1D;color:#FECACA}
+.item{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);background:none;border-left:0;border-right:0;border-bottom:0;width:100%;text-align:left}
+.item:first-child{border-top:0}.av{width:42px;height:42px;border-radius:50%;background:#134E4A;color:#5EEAD4;display:grid;place-items:center;font-weight:700;flex:none}
+.fl{flex:1;min-width:0}.r{text-align:right}
+input,select{width:100%;min-height:46px;border-radius:12px;border:1px solid #334155;background:#0B1220;padding:0 12px;margin:4px 0 12px}
+label{font-size:12px;color:var(--mu)}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:8px 8px calc(env(safe-area-inset-bottom) + 8px)}
+nav button{flex:1;min-height:48px;border:0;background:none;color:var(--mu);font-size:12px}nav .on{color:var(--ac);font-weight:700}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
+.sh{background:var(--card);width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom) + 20px)}
+.bar{height:10px;border-radius:5px;background:var(--line);margin-top:6px}.bar i{display:block;height:10px;border-radius:5px;background:var(--ac)}
+.dot{width:10px;height:10px;border-radius:5px;display:inline-block}
+#toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--ac);color:#0B1220;font-weight:700;padding:10px 16px;border-radius:99px;display:none}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+</style></head><body>
+<div id="app"></div><div id="toast" role="status"></div>
+<input type="file" id="imp" accept=".json,application/json" hidden>
+<script>
+const K='netku-db-v1',$=s=>document.querySelector(s);
+let db;try{db=JSON.parse(localStorage.getItem(K))}catch(e){}
+db=db&&db.cust?db:{pkgs:[],cust:[],inv:[]};
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(db))}catch(e){toast('Gagal menyimpan data')}};
+const rp=n=>'Rp '+Number(n).toLocaleString('id-ID'),pad=n=>String(n).padStart(2,'0'),uid=()=>Math.random().toString(36).slice(2,9);
+const N=new Date(),cur=N.getFullYear()+'-'+pad(N.getMonth()+1),today=cur+'-'+pad(N.getDate());
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pk=id=>db.pkgs.find(p=>p.id==id)||{name:'-',price:0},cu=id=>db.cust.find(c=>c.id==id)||{name:'(dihapus)'};
+const st=i=>i.paidAt?'lunas':today>i.due?'telat':'belum',lbl={lunas:'Lunas',belum:'Belum bayar',telat:'Telat'};
+const late=i=>Math.floor((new Date(today)-new Date(i.due))/864e5);
+const ini=n=>n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+const MN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+let S={tab:'home',f:'all',q:'',sel:null,sh:null};
+function gen(){db.cust.filter(c=>c.status!='berhenti').forEach(c=>{if(!db.inv.some(i=>i.cid==c.id&&i.period==cur))db.inv.push({id:uid(),cid:c.id,period:cur,amount:pk(c.pkg).price,due:cur+'-'+pad(Math.min(c.due,28)),paidAt:null,method:null})});save()}
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200)}
+const sum=a=>a.reduce((s,i)=>s+i.amount,0);
+function months(){const o=[];for(let k=5;k>=0;k--){const d=new Date(N.getFullYear(),N.getMonth()-k,1),p=d.getFullYear()+'-'+pad(d.getMonth()+1);o.push({m:MN[d.getMonth()],v:sum(db.inv.filter(i=>i.period==p&&i.paidAt))})}return o}
+function chart(){const ms=months(),mx=Math.max(...ms.map(x=>x.v),1);return `<svg viewBox="0 0 310 160" width="100%" role="img" aria-label="Pendapatan masuk 6 bulan terakhir">${ms.map((x,i)=>{const h=Math.round(x.v/mx*118);return `<rect x="${12+i*52}" y="${130-h}" width="32" height="${h}" rx="6" fill="${i==5?'#2DD4BF':'#3B4A66'}"/><text x="${28+i*52}" y="152" text-anchor="middle" font-size="11" fill="#94A3B8">${x.m}</text>`}).join('')}</svg>`}
+function donut(c){const t=c.lunas+c.belum+c.telat||1,L=251.3,a=c.lunas/t*L,b=c.belum/t*L,d=c.telat/t*L;return `<svg width="104" height="104" viewBox="0 0 110 110" role="img" aria-label="Status tagihan bulan ini"><g transform="rotate(-90 55 55)" fill="none" stroke-width="16"><circle cx="55" cy="55" r="40" stroke="#243049"/><circle cx="55" cy="55" r="40" stroke="#2DD4BF" stroke-dasharray="${a} ${L}"/><circle cx="55" cy="55" r="40" stroke="#FBBF24" stroke-dasharray="${b} ${L}" stroke-dashoffset="${-a}"/><circle cx="55" cy="55" r="40" stroke="#F87171" stroke-dasharray="${d} ${L}" stroke-dashoffset="${-(a+b)}"/></g><text x="55" y="61" text-anchor="middle" font-size="18" font-weight="700" fill="#F1F5F9">${Math.round(c.lunas/t*100)}%</text></svg>`}
+const leg=(c,n,v)=>`<div class="row mu" style="margin-top:6px;color:#CBD5E1"><span><i class="dot" style="background:${c}"></i> ${n}</span><b>${v}</b></div>`;
+function empty(){return `<div class="card" style="text-align:center"><h2>Belum ada data</h2><p class="mu">Tambah pelanggan pertama, atau coba dulu dengan data contoh.</p><button class="btn p" data-a="add">Tambah pelanggan</button><div style="height:10px"></div><button class="btn" data-a="demo">Muat data contoh</button></div>`}
+function home(){const m=db.inv.filter(i=>i.period==cur),c={lunas:0,belum:0,telat:0};m.forEach(i=>c[st(i)]++);
+const tg=sum(db.inv.filter(i=>st(i)=='telat'||st(i)=='belum')),nw=db.cust.filter(x=>(x.since||'').slice(0,7)==cur).length;
+return `<div class="row"><div><div class="mu">NetKu Billing</div><h1>Ringkasan</h1></div><span class="chip" style="display:grid;place-items:center">${MN[N.getMonth()]} ${N.getFullYear()}</span></div>`+(db.cust.length?`
+<div class="card"><div class="mu">Pendapatan masuk bulan ini</div><div class="big">${rp(sum(m.filter(i=>i.paidAt)))}</div>${chart()}</div>
+<div class="g"><div class="card"><div class="mu">Belum terbayar</div><div class="b" style="font-size:20px;color:#FCA5A5">${rp(tg)}</div><div class="mu">${db.inv.filter(i=>!i.paidAt).length} tagihan</div></div><div class="card"><div class="mu">Pelanggan baru</div><div class="b" style="font-size:20px">+${nw}</div><div class="mu">bulan ini</div></div></div>
+<div class="card row" style="gap:16px">${donut(c)}<div class="fl"><h2>Status tagihan</h2>${leg('#2DD4BF','Lunas',c.lunas)}${leg('#FBBF24','Belum bayar',c.belum)}${leg('#F87171','Telat',c.telat)}</div></div>
+<div class="card"><h2>Pelanggan</h2><div class="row mu" style="color:#CBD5E1"><span>${db.cust.filter(x=>x.status=='aktif').length} aktif</span><span style="color:#FCA5A5">${db.cust.filter(x=>x.status=='isolir').length} terisolir</span></div></div>`:empty())}
+function invRow(i){const c=cu(i.cid),s=st(i);return `<button class="item" data-a="pay" data-v="${i.id}"><span class="av">${esc(ini(c.name))}</span><span class="fl"><div class="b">${esc(c.name)}</div><div class="mu">${i.period} · tempo ${i.due.slice(8)} ${MN[+i.due.slice(5,7)-1]}${s=='telat'?' · telat '+late(i)+' hr':''}</div></span><span class="r"><div class="b">${rp(i.amount)}</div><span class="pill ${s}">${lbl[s]}</span></span></button>`}
+function invList(){const q=S.q.toLowerCase(),l=db.inv.filter(i=>(S.f=='all'||st(i)==S.f)&&cu(i.cid).name.toLowerCase().includes(q)).sort((a,b)=>b.period.localeCompare(a.period)||a.due.localeCompare(b.due));return l.length?l.map(invRow).join(''):'<p class="mu">Tidak ada tagihan yang cocok.</p>'}
+function bills(){return `<h1>Tagihan</h1><input id="q" placeholder="Cari nama pelanggan" aria-label="Cari nama pelanggan" value="${esc(S.q)}" style="margin-top:14px"><div class="g" style="gap:6px;overflow:auto">${[['all','Semua'],['belum','Belum'],['lunas','Lunas'],['telat','Telat']].map(([k,v])=>`<button class="chip ${S.f==k?'on':''}" data-a="f" data-v="${k}">${v}</button>`).join('')}</div><div class="card" id="il">${invList()}</div>`}
+function custList(){const q=S.q.toLowerCase(),l=db.cust.filter(c=>c.name.toLowerCase().includes(q));return l.length?l.map(c=>`<button class="item" data-a="sel" data-v="${c.id}"><span class="av">${esc(ini(c.name))}</span><span class="fl"><div class="b">${esc(c.name)}</div><div class="mu">${esc(pk(c.pkg).name)} · tempo tgl ${c.due}</div></span><span class="pill ${c.status=='aktif'?'lunas':'telat'}">${c.status=='aktif'?'Aktif':'Isolir'}</span></button>`).join(''):'<p class="mu">Belum ada pelanggan.</p>'}
+function custs(){if(S.sel)return detail();return `<div class="row"><h1>Pelanggan</h1><button class="btn p" style="width:auto" data-a="add">+ Tambah</button></div><input id="q" placeholder="Cari pelanggan" aria-label="Cari pelanggan" value="${esc(S.q)}" style="margin-top:14px"><div class="card" id="cl">${custList()}</div>`}
+function detail(){const c=cu(S.sel),iv=db.inv.filter(i=>i.cid==c.id).sort((a,b)=>b.period.localeCompare(a.period)),wa=String(c.wa||'').replace(/\D/g,'').replace(/^0/,'62'),open=iv.find(i=>!i.paidAt);
+return `<button class="chip" data-a="back" aria-label="Kembali">&lt; Kembali</button><div class="card" style="text-align:center"><div class="av" style="margin:0 auto 8px;width:60px;height:60px;font-size:20px">${esc(ini(c.name))}</div><h1 style="font-size:18px">${esc(c.name)}</h1><div class="mu">${esc(c.addr)} · ${esc(c.wa)}</div><p><span class="pill ${c.status=='aktif'?'lunas':'telat'}">${c.status=='aktif'?'Aktif':'Terisolir'}</span></p></div>
+<div class="g"><div class="card"><div class="mu">Paket</div><div class="b">${esc(pk(c.pkg).name)}</div><div class="mu">${rp(pk(c.pkg).price)}/bln</div></div><div class="card"><div class="mu">Jatuh tempo</div><div class="b">Tgl ${c.due}</div><div class="mu">tiap bulan</div></div></div>
+<div class="card"><h2>Riwayat tagihan</h2>${iv.map(i=>`<div class="row" style="margin-top:10px"><div>${i.period}<div class="mu">${i.paidAt?i.method+' · '+i.paidAt:'Jatuh tempo '+i.due}</div></div><div class="r b">${rp(i.amount)}<br><span class="pill ${st(i)}">${lbl[st(i)]}</span></div></div>`).join('')||'<p class="mu">Belum ada tagihan.</p>'}</div>
+<div class="g" style="margin-top:12px">${wa?`<a class="btn" style="display:grid;place-items:center;text-decoration:none" href="https://wa.me/${wa}?text=${encodeURIComponent('Halo '+c.name+', pengingat tagihan WiFi '+(open?rp(open.amount)+' jatuh tempo '+open.due:'')+'. Terima kasih.')}" target="_blank" rel="noopener">Kirim WA</a>`:''}${open?`<button class="btn p" data-a="pay" data-v="${open.id}">Catat bayar</button>`:''}</div>
+<div class="g" style="margin-top:12px"><button class="btn" data-a="iso">${c.status=='aktif'?'Isolir pelanggan':'Aktifkan kembali'}</button><button class="btn d" data-a="del">Hapus</button></div>`}
+function report(){const pm=db.inv.filter(i=>i.period==cur&&i.paidAt),mx=Math.max(...db.pkgs.map(p=>sum(pm.filter(i=>cu(i.cid).pkg==p.id))),1),me={};pm.forEach(i=>me[i.method]=(me[i.method]||0)+i.amount);const T=sum(pm)||1,tk=db.inv.filter(i=>st(i)=='telat').sort((a,b)=>late(b)-late(a)).slice(0,5);
+return `<h1>Laporan</h1><div class="card"><h2>Pendapatan per paket (bulan ini)</h2>${db.pkgs.map(p=>{const v=sum(pm.filter(i=>cu(i.cid).pkg==p.id));return `<div style="margin-top:12px"><div class="row"><span>${esc(p.name)}</span><b>${rp(v)}</b></div><div class="bar"><i style="width:${v/mx*100}%"></i></div></div>`}).join('')||'<p class="mu">Belum ada paket.</p>'}</div>
+<div class="card"><h2>Metode pembayaran</h2>${Object.entries(me).map(([k,v],n)=>leg(['#2DD4BF','#60A5FA','#FBBF24'][n%3],k,Math.round(v/T*100)+'%')).join('')||'<p class="mu">Belum ada pembayaran bulan ini.</p>'}</div>
+<div class="card"><h2>Tunggakan terlama</h2>${tk.map(i=>`<div class="row" style="margin-top:10px"><div>${esc(cu(i.cid).name)}<div class="mu" style="color:#FCA5A5">Telat ${late(i)} hari</div></div><b>${rp(i.amount)}</b></div>`).join('')||'<p class="mu">Tidak ada tunggakan.</p>'}<div style="height:12px"></div><button class="btn" data-a="auto">Isolir yang telat lebih dari 7 hari</button></div>
+<div class="card"><h2>Data di HP ini</h2><p class="mu">Data tersimpan lokal di browser HP. Ekspor berkala sebagai cadangan.</p><div class="g"><button class="btn p" data-a="exp">Ekspor JSON</button><button class="btn" data-a="imp">Impor JSON</button></div><div style="height:10px"></div><button class="btn d" data-a="reset">Hapus semua data</button></div>`}
+function sheet(){const s=S.sh;if(!s)return'';let h='';
+if(s.t=='pay'){const i=db.inv.find(x=>x.id==s.id),c=cu(i.cid);h=i.paidAt?`<h2>${esc(c.name)}</h2><p class="mu">Sudah dibayar ${i.paidAt} (${i.method}).</p><button class="btn d" data-a="unpay" data-v="${i.id}">Batalkan pembayaran</button>`:`<h2>Catat pembayaran</h2><p>${esc(c.name)} · ${i.period}<br><b class="big">${rp(i.amount)}</b></p><label for="m">Metode</label><select id="m"><option>Tunai</option><option>Transfer</option><option>QRIS</option></select><button class="btn p" data-a="paid" data-v="${i.id}">Simpan pembayaran</button>`}
+if(s.t=='add')h=`<h2>Tambah pelanggan</h2><label for="n">Nama</label><input id="n" autocomplete="off"><label for="ad">Alamat</label><input id="ad"><label for="w">No. WhatsApp</label><input id="w" inputmode="tel"><label for="pk">Paket</label><select id="pk">${db.pkgs.map(p=>`<option value="${p.id}">${esc(p.name)} - ${rp(p.price)}</option>`).join('')}<option value="_new">+ Paket baru…</option></select><label for="du">Tanggal jatuh tempo (1-28)</label><input id="du" type="number" min="1" max="28" value="10"><button class="btn p" data-a="save">Simpan pelanggan</button>`;
+if(s.t=='pkg')h=`<h2>Paket baru</h2><label for="pn">Nama paket</label><input id="pn" placeholder="mis. 20 Mbps"><label for="pp">Harga per bulan (Rp)</label><input id="pp" type="number" inputmode="numeric"><button class="btn p" data-a="savepkg">Simpan paket</button>`;
+return `<div class="ov" data-a="close"><div class="sh" data-a="noop">${h}</div></div>`}
+function draw(){const t=S.tab,v={home,bills,cust:custs,report}[t]();$('#app').innerHTML=v+`<nav>${[['home','Beranda'],['bills','Tagihan'],['cust','Pelanggan'],['report','Laporan']].map(([k,n])=>`<button data-a="tab" data-v="${k}" class="${t==k?'on':''}">${n}</button>`).join('')}</nav>`+sheet()}
+const A={noop(){},tab(v){S={...S,tab:v,q:'',sel:null,sh:null};draw()},f(v){S.f=v;draw()},sel(v){S.sel=v;draw()},back(){S.sel=null;draw()},close(){S.sh=null;draw()},pay(v){S.sh={t:'pay',id:v};draw()},add(){if(!db.pkgs.length)S.sh={t:'pkg',first:1};else S.sh={t:'add'};S.tab=S.tab=='home'?'cust':S.tab;draw()},
+paid(v){const i=db.inv.find(x=>x.id==v);i.paidAt=today;i.method=$('#m').value;if(cu(i.cid).status=='isolir'&&!db.inv.some(x=>x.cid==i.cid&&st(x)=='telat')){cu(i.cid).status='aktif'}save();S.sh=null;draw();toast('Pembayaran tersimpan')},
+unpay(v){const i=db.inv.find(x=>x.id==v);i.paidAt=null;i.method=null;save();S.sh=null;draw()},
+savepkg(){const n=$('#pn').value.trim(),p=+$('#pp').value;if(!n||!p)return toast('Isi nama dan harga');db.pkgs.push({id:uid(),name:n,price:p});save();S.sh={t:'add'};draw()},
+save(){const n=$('#n').value.trim(),p=$('#pk').value;if(p=='_new'){S.sh={t:'pkg'};return draw()}if(!n)return toast('Nama wajib diisi');const d=Math.min(28,Math.max(1,+$('#du').value||10));db.cust.push({id:uid(),name:n,addr:$('#ad').value,wa:$('#w').value,pkg:p,due:d,status:'aktif',since:today});gen();S.sh=null;draw();toast('Pelanggan disimpan')},
+iso(){const c=cu(S.sel);c.status=c.status=='aktif'?'isolir':'aktif';save();draw()},del(){if(confirm('Hapus pelanggan dan semua tagihannya?')){db.cust=db.cust.filter(c=>c.id!=S.sel);db.inv=db.inv.filter(i=>i.cid!=S.sel);save();S.sel=null;draw()}},
+auto(){let n=0;db.inv.filter(i=>st(i)=='telat'&&late(i)>7).forEach(i=>{const c=cu(i.cid);if(c.status=='aktif'){c.status='isolir';n++}});save();draw();toast(n+' pelanggan diisolir')},
+exp(){const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='netku-data-'+today+'.json';a.click();toast('File JSON diunduh')},
+imp(){$('#imp').click()},reset(){if(confirm('Hapus SEMUA data di HP ini? Ekspor dulu bila perlu.')){db={pkgs:[],cust:[],inv:[]};save();draw()}},
+demo(){const p=[['10 Mbps',100000],['20 Mbps',150000],['30 Mbps',200000]].map(([name,price])=>({id:uid(),name,price}));db.pkgs=p;db.cust=['Budi Santoso','Siti Rahma','Agus Wijaya','Dewi Kartika','Rudi Pratama'].map((name,k)=>({id:uid(),name,addr:'Jl. Melati '+(k+1),wa:'0812000000'+k,pkg:p[k%3].id,due:5+k*3,status:'aktif',since:today}));db.inv=[];gen();db.inv.forEach((i,k)=>{if(k%2==0){i.paidAt=today;i.method=['Tunai','Transfer','QRIS'][k%3]}});save();draw()}};
+document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t)return;if(t.dataset.a=='close'&&e.target!==t)return;A[t.dataset.a]?.(t.dataset.v)});
+document.addEventListener('input',e=>{if(e.target.id!='q')return;S.q=e.target.value;const l=$('#il')||$('#cl');if(l)l.innerHTML=S.tab=='bills'?invList():custList()});
+$('#imp').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.cust)||!Array.isArray(d.inv)||!Array.isArray(d.pkgs))throw 0;if(confirm('Ganti data saat ini dengan isi file ini?')){db=d;save();gen();S.tab='home';draw();toast('Data diimpor')}}catch(x){toast('File JSON tidak valid')}};r.readAsText(f);e.target.value=''});
+gen();draw();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
